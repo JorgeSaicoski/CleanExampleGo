@@ -1,212 +1,78 @@
-# Application Services (Interfaces)
-
-**Define your service interfaces here – implement them in `infrastructure/`!**
-
----
+# Application Services (Outbound Ports)
 
 ## Purpose
 
-Service interfaces represent contracts for external systems (third-party APIs, microservices, domain services) or complex business operations. They are defined in the **application layer** and implemented in the **infrastructure layer**.
+Service interfaces represent **contracts for third-party systems or external microservices** (e.g. payment gateways, loyalty APIs, fraud checks, notification providers). 
+They are defined here in the **application layer** (Outbound Ports) and implemented in the **infrastructure layer** (Driven Adapters).
 
-**Key Principle**: The application defines **what it expects**, and the infrastructure adapts to provide it.
+**Key Architectural Rule**: Service contracts use domain entities or domain primitives. They never import infrastructure libraries or delivery DTOs.
 
 ---
 
 ## Rules
 
 ✅ **DO:**
-- Keep interfaces focused and cohesive
-- Use **application DTOs** in method signatures
-- Document expected behavior
-- Define interfaces for external services
-- Return domain errors (not HTTP errors)
-- Include context.Context for production code
+- Include `context.Context` in every method.
+- Return domain types or domain errors (e.g. `ErrServiceUnavailable`), never raw HTTP status codes.
+- Keep interfaces cohesive and narrow (Interface Segregation Principle).
 
 ❌ **DON'T:**
-- Depend on external libraries in the interface
-- Mix multiple service concerns
-- Use HTTP-specific types in interface
-- Use infrastructure-specific types (like database entities)
-- Implement the service here (implement in infrastructure)
+- Import external vendor SDKs (e.g. AWS SDK, Resend, Sendgrid, Stripe) in this package. Vendor dependencies belong exclusively in `infrastructure/`.
+- Use HTTP request/response types.
 
 ---
 
-## Example: Email Service (Resend)
-
-Suppose you want to send transactional emails using [Resend](https://resend.com/):
-
-### Interface Definition
+## Example: Points Service
 
 ```go
-// email_service.go
+// application/services/points_service.go
 package services
 
 import "context"
 
-// EmailService handles sending emails via Resend or other providers
-// Only domain types and context.Context in the interface
-// No external library types
-
-type EmailService interface {
-    SendEmail(ctx context.Context, to, subject, body string) error
-    SendBulkEmail(ctx context.Context, recipients []string, subject, body string) error
-}
-```
-
-### Implementation Hint (infrastructure/services/email_service_impl.go)
-
-```go
-// EmailServiceImpl implements EmailService using Resend
-// This is just a sketch for documentation purposes
-package services
-
-import (
-    "context"
-    "github.com/resend/resend-go" // External library only in implementation
-)
-
-type EmailServiceImpl struct {
-    client *resend.Client
-}
-
-func NewEmailService(apiKey string) EmailService {
-    client := resend.NewClient(apiKey)
-    return &EmailServiceImpl{client: client}
-}
-
-func (s *EmailServiceImpl) SendEmail(ctx context.Context, to, subject, body string) error {
-    // Use Resend client to send email
-    // ...
-    return nil
-}
-
-func (s *EmailServiceImpl) SendBulkEmail(ctx context.Context, recipients []string, subject, body string) error {
-    // Use Resend client to send bulk email
-    // ...
-    return nil
+type PointsService interface {
+    GetClientPoints(ctx context.Context, clientID string) (int, error)
+    AddPoints(ctx context.Context, clientID string, points int) error
+    ConsumePoints(ctx context.Context, clientID string, points int) error
 }
 ```
 
 ---
 
-## Other Service Interface Examples
+## Example: Promotion Service
 
-### Points Service
 ```go
-// points_service.go
+// application/services/promotion_service.go
 package services
 
-import (
-    "context"
-    "ExampleProject/application/dto"
-)
-
-type PointsService interface {
-    GetBalance(ctx context.Context, clientID string) (*dto.PointsDTO, error)
-    AddPoints(ctx context.Context, clientID string, points int) error
-    ConsumePoints(ctx context.Context, clientID string, points int) error
-    GetHistory(ctx context.Context, clientID string) ([]*dto.PointsTransactionDTO, error)
-}
-```
-
-### Promotion Service
-```go
-// promotion_service.go
-package services
-
-import (
-    "context"
-    "ExampleProject/application/dto"
-)
+import "context"
 
 type PromotionService interface {
     HasActivePromotion(ctx context.Context, clientID string) (bool, error)
-    GetClientPromotions(ctx context.Context, clientID string) ([]*dto.PromotionDTO, error)
-    ApplyPromotion(ctx context.Context, clientID, promotionID string) error
-    ValidatePromotion(ctx context.Context, promotionCode string) (bool, error)
-}
-```
-
-### Search Service
-```go
-// search_service.go
-package services
-
-import (
-    "context"
-    "ExampleProject/application/dto"
-)
-
-type SearchService interface {
-    SearchBooks(ctx context.Context, query string, limit int) ([]*dto.BookDTO, error)
-    SearchClients(ctx context.Context, query string, limit int) ([]*dto.ClientDTO, error)
-    IndexBook(ctx context.Context, book *dto.BookDTO) error
-    RemoveBookFromIndex(ctx context.Context, bookID string) error
+    GetClientPromotions(ctx context.Context, clientID string) ([]string, error)
 }
 ```
 
 ---
 
-## Testing with Service Interfaces
-
-Create mocks for testing:
+## Testing with Mocks
 
 ```go
-// mock_promotion_service.go
 package services_test
+
+import "context"
 
 type MockPromotionService struct {
     HasPromotionResult bool
-    PromotionsList    []string
-    Err               error
+    PromotionsList     []string
+    Err                error
 }
 
 func (m *MockPromotionService) HasActivePromotion(ctx context.Context, clientID string) (bool, error) {
     return m.HasPromotionResult, m.Err
 }
+
 func (m *MockPromotionService) GetClientPromotions(ctx context.Context, clientID string) ([]string, error) {
     return m.PromotionsList, m.Err
 }
-func (m *MockPromotionService) ApplyPromotion(ctx context.Context, clientID, promotionID string) error {
-    return m.Err
-}
-func (m *MockPromotionService) ValidatePromotion(ctx context.Context, promotionCode string) (bool, error) {
-    return true, m.Err
-}
 ```
-
----
-
-## Service vs Repository
-
-- **Repository:** Data access abstraction, CRUD, always returns domain entities
-- **Service:** Business operation abstraction, may coordinate multiple entities, may call external APIs, may return domain entities or other types
-
----
-
-## Error Handling
-
-Services should return domain errors (not HTTP errors):
-
-```go
-var (
-    ErrServiceUnavailable = errors.New("external service unavailable")
-    ErrTimeout            = errors.New("service request timeout")
-    ErrInvalidResponse    = errors.New("invalid response from service")
-)
-```
-
----
-
-## Summary
-
-- Define service interfaces in the application layer
-- Implement them in the infrastructure layer
-- Use domain types and context.Context
-- Return domain errors
-- Mock interfaces for testing
-- Keep interfaces focused and cohesive
-
----
-
-**Place your service interfaces here!**
