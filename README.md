@@ -39,6 +39,21 @@ This architecture follows the **Dependency Inversion Principle**:
 
 ---
 
+## 🧭 Architectural Strategy: Monolith vs. Satellite Microservices
+
+We follow a **Monolith First** engineering strategy. Distributed systems add networking, latency, and consistency overhead; starting with a well-structured modular monolith keeps shipping speed high and operational costs low.
+
+| When to keep it in the Monolith | When to extract a Satellite Microservice |
+| :--- | :--- |
+| Core business domains (e.g. Clients, Books, Borrowing) | Distinct sub-domains / Bounded Contexts (e.g. Reviews, Notifications) |
+| Requires strong ACID transactions and immediate consistency | Can operate asynchronously via domain events (Eventual Consistency) |
+| Managed by a single team with shared release cycles | Independent scaling requirements or failure blast-radius containment |
+
+> [!TIP]
+> **Satellite Microservice Standard**: For the architecture layout, centralized routing, and asynchronous event consumer patterns of satellite services, see **[MICROSERVICES.md](file:///home/jorgesarkis/Wintap/CleanExampleGo/MICROSERVICES.md)**.
+
+---
+
 ## 📝 Architectural Decision Record (ADR): Domain Entities vs Application DTOs
 
 ### Context
